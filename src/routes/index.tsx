@@ -44,7 +44,7 @@ function Index() {
 
   useEffect(() => {
     supabase.from("services").select("*").order("sort").then(({ data }) => setServices(data ?? []));
-    setDay(nextDays(1)[0]);
+    setDay(nextDays(1)[0] ?? null);
   }, []);
 
   const loadBusy = async (d: Date) => {
