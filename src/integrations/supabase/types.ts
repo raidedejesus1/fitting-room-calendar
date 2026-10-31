@@ -174,6 +174,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      move_booking: {
+        Args: { _date: string; _id: string; _start: number }
+        Returns: undefined
+      }
     }
     Enums: {
       app_role: "admin"
