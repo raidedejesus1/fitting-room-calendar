@@ -15,6 +15,13 @@
       "when": 1793460511192,
       "tag": "0001_booking_system",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793460800363,
+      "tag": "0002_move_booking",
+      "breakpoints": true
     }
   ]
 }
