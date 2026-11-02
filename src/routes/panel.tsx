@@ -4,7 +4,7 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Field } from "@/components/Field";
-import { fmt, toISODate } from "@/lib/agenda";
+import { fmt, isWorkday, slotsFor, toISODate, type Busy } from "@/lib/agenda";
 
 export const Route = createFileRoute("/panel")({
   head: () => ({
@@ -80,6 +80,7 @@ function Agenda() {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [showCancelled, setShowCancelled] = useState(false);
+  const [moving, setMoving] = useState<string | null>(null);
 
   const load = async () => {
     const { data: u } = await supabase.auth.getUser();
@@ -118,7 +119,10 @@ function Agenda() {
           <h1 className="text-4xl font-semibold">Agenda del taller</h1>
           <p className="mt-1 text-muted-foreground">Próximos turnos de prueba</p>
         </div>
-        <button onClick={() => supabase.auth.signOut()} className="text-sm text-accent underline">Salir</button>
+        <div className="flex gap-4">
+          <ChangePassword />
+          <button onClick={() => supabase.auth.signOut()} className="text-sm text-accent underline">Salir</button>
+        </div>
       </div>
       <div className="mt-6 grid gap-3 sm:grid-cols-3">
         <Stat label="Turnos hoy" value={active.filter((r) => r.booking_date === today).length} />
@@ -144,8 +148,12 @@ function Agenda() {
                   {r.notes && <p className="text-sm text-muted-foreground">{r.notes}</p>}
                 </div>
                 {r.status === "confirmada" ? (
-                  <button onClick={() => cancel(r.id)} className="rounded-full border border-border px-4 py-1.5 text-sm hover:border-destructive hover:text-destructive">Cancelar</button>
+                  <div className="flex gap-2">
+                    <button onClick={() => setMoving(moving === r.id ? null : r.id)} className="rounded-full border border-border px-4 py-1.5 text-sm hover:border-accent hover:text-accent">Mover</button>
+                    <button onClick={() => cancel(r.id)} className="rounded-full border border-border px-4 py-1.5 text-sm hover:border-destructive hover:text-destructive">Cancelar</button>
+                  </div>
                 ) : <span className="text-sm">Cancelado</span>}
+                {moving === r.id && <MoveForm row={r} onDone={() => { setMoving(null); load(); }} />}
               </div>
             ))}
           </div>
@@ -161,5 +169,62 @@ function Stat({ label, value }: { label: string; value: number | string }) {
       <p className="text-sm text-muted-foreground">{label}</p>
       <p className="font-serif text-3xl text-foreground">{value}</p>
     </div>
+  );
+}
+
+function MoveForm({ row, onDone }: { row: Row; onDone: () => void }) {
+  const [date, setDate] = useState(row.booking_date);
+  const [busy, setBusy] = useState<Busy[]>([]);
+  const [start, setStart] = useState<number | null>(null);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    setStart(null);
+    supabase.rpc("get_busy", { _date: date }).then(({ data }) => setBusy((data as Busy[]) ?? []));
+  }, [date]);
+  const workday = isWorkday(new Date(date + "T12:00"));
+  // Exclude this booking's own slot so it can shift within the same day
+  const others = busy.filter((b) => !(date === row.booking_date && b.start_min === row.start_min));
+  const free = workday ? slotsFor(row.duration_min, others).filter((s) => s.free) : [];
+  const save = async () => {
+    if (start === null) return;
+    const { error } = await supabase.rpc("move_booking", { _id: row.id, _date: date, _start: start });
+    if (error) setErr(error.message); else onDone();
+  };
+  return (
+    <div className="w-full space-y-3 border-t border-border pt-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <input type="date" min={toISODate(new Date())} value={date} onChange={(e) => setDate(e.target.value)} className="input w-auto" />
+        {!workday && <span className="text-sm text-muted-foreground">El taller atiende de lunes a viernes.</span>}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {free.map((s) => (
+          <button key={s.start} onClick={() => setStart(s.start)}
+            className={`rounded-lg border px-3 py-1.5 text-sm ${start === s.start ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background"}`}>
+            {fmt(s.start)}
+          </button>
+        ))}
+      </div>
+      {err && <p className="text-sm text-destructive">{err}</p>}
+      <button disabled={start === null} onClick={save} className="rounded-full bg-accent px-5 py-2 text-sm text-accent-foreground disabled:opacity-50">Guardar nuevo horario</button>
+    </div>
+  );
+}
+
+function ChangePassword() {
+  const [open, setOpen] = useState(false);
+  const [pw, setPw] = useState("");
+  const [msg, setMsg] = useState("");
+  if (!open) return <button onClick={() => setOpen(true)} className="text-sm text-accent underline">Cambiar clave</button>;
+  return (
+    <form className="flex flex-wrap items-center gap-2" onSubmit={async (e) => {
+      e.preventDefault();
+      const { error } = await supabase.auth.updateUser({ password: pw });
+      setMsg(error ? error.message : "Clave actualizada");
+      if (!error) setPw("");
+    }}>
+      <input type="password" required minLength={6} value={pw} onChange={(e) => setPw(e.target.value)} className="input w-40" placeholder="Nueva clave" />
+      <button className="rounded-full bg-primary px-4 py-2 text-sm text-primary-foreground">Guardar</button>
+      {msg && <span className="text-sm text-muted-foreground">{msg}</span>}
+    </form>
   );
 }
