@@ -7,10 +7,11 @@ export function SiteHeader() {
         <Link to="/" className="font-serif text-xl font-semibold text-foreground">
           Taller de Costura <span className="italic text-primary">Marta</span>
         </Link>
-        <nav className="flex gap-5 text-sm text-muted-foreground">
+        <nav className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
           <Link to="/" className="hover:text-primary" activeProps={{ className: "text-primary" }} activeOptions={{ exact: true }}>Reservar</Link>
           <Link to="/cancelar" className="hover:text-primary" activeProps={{ className: "text-primary" }}>Cancelar turno</Link>
-          <Link to="/panel" className="hover:text-primary" activeProps={{ className: "text-primary" }}>Panel</Link>
+          <Link to="/taller" className="hover:text-primary" activeProps={{ className: "text-primary" }}>El taller</Link>
+          <Link to="/admin" className="hover:text-primary" activeProps={{ className: "text-primary" }}>Panel</Link>
         </nav>
       </div>
     </header>

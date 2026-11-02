@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Field } from "@/components/Field";
+import { whatsappSummaryUrl } from "@/lib/business";
 import { fmt, isWorkday, slotsFor, toISODate, type Busy } from "@/lib/agenda";
 
 export const Route = createFileRoute("/")({
@@ -98,8 +99,13 @@ function Index() {
             <p className="mt-1 font-serif text-4xl tracking-widest text-accent">{done.code}</p>
             <p className="mt-3 text-sm text-muted-foreground">Guardalo: con este código y tu teléfono podés cancelar el turno.</p>
           </div>
+          <a href={whatsappSummaryUrl({ name: form.name, service: service.name, day: dayLabel(day), time: fmt(slot), code: done.code })}
+            target="_blank" rel="noopener noreferrer"
+            className="mt-8 flex w-full items-center justify-center rounded-full bg-accent px-6 py-3 text-accent-foreground hover:opacity-90 sm:mx-auto sm:w-auto">
+            Enviar resumen por WhatsApp
+          </a>
           <button onClick={() => { setDone(null); setSlot(null); setForm({ name: "", phone: "", notes: "" }); if (day) loadBusy(day); }}
-            className="mt-8 rounded-full bg-primary px-6 py-3 text-primary-foreground hover:opacity-90">
+            className="mt-3 rounded-full border border-border px-6 py-3 hover:border-primary">
             Reservar otro turno
           </button>
         </main>
