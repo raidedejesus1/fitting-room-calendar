@@ -121,6 +121,33 @@ export type Database = {
         }
         Relationships: []
       }
+      time_blocks: {
+        Row: {
+          block_date: string
+          created_at: string
+          duration_min: number
+          id: string
+          reason: string
+          start_min: number
+        }
+        Insert: {
+          block_date: string
+          created_at?: string
+          duration_min?: number
+          id?: string
+          reason?: string
+          start_min: number
+        }
+        Update: {
+          block_date?: string
+          created_at?: string
+          duration_min?: number
+          id?: string
+          reason?: string
+          start_min?: number
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string
@@ -144,6 +171,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      add_block: {
+        Args: { _date: string; _reason: string; _start: number }
+        Returns: undefined
+      }
       book_appointment: {
         Args: {
           _date: string
@@ -177,6 +208,10 @@ export type Database = {
       move_booking: {
         Args: { _date: string; _id: string; _start: number }
         Returns: undefined
+      }
+      slot_taken: {
+        Args: { _date: string; _end: number; _exclude: string; _start: number }
+        Returns: boolean
       }
     }
     Enums: {
