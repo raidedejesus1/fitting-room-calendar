@@ -142,7 +142,7 @@ function Agenda() {
       </label>
       <BlockForm onDone={load} />
       {days.length === 0 && <p className="mt-8 text-muted-foreground">No hay turnos próximos.</p>}
-      {days.map((date) => [date, byDay[date]] as const).map(([date, list]) => (
+      {days.map((date) => [date, byDay[date] ?? []] as const).map(([date, list]) => (
         <section key={date} className="mt-8">
           <h2 className="mb-3 text-xl font-semibold capitalize">
             {new Date(date + "T12:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" })}
