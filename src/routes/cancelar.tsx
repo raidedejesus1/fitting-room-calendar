@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { cancelByCode } from "@/lib/store";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Field } from "@/components/Field";
 
@@ -23,9 +23,7 @@ function Cancelar() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setState("busy");
-    const { data, error } = await supabase.rpc("cancel_booking", { _code: code, _phone: phone });
-    setState(!error && data ? "ok" : "fail");
+    setState(cancelByCode(code, phone) ? "ok" : "fail");
   };
 
   return (
