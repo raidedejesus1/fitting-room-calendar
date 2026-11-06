@@ -9,5 +9,5 @@
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
 
-- Booking writes go only through SECURITY DEFINER RPCs (book_appointment, cancel_booking, get_busy) so anonymous clients never read client data; slot math lives in src/lib/agenda.ts and is mirrored in book_appointment.
-- Admin access uses public.user_roles + has_role(); the first signed-up user becomes admin via trigger.
+- No backend or external services: all bookings, blocks and availability persist only in localStorage via src/lib/store.ts (overlap re-checked there before every write); slot math lives in src/lib/agenda.ts.
+- The /admin panel is gated by a simple password constant in src/lib/admin.ts with a sessionStorage flag, as the brief requires.
