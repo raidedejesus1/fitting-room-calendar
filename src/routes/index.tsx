@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { SERVICES, bookAppointment, getBusy, type Service } from "@/lib/store";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Field } from "@/components/Field";
 import { whatsappSummaryUrl } from "@/lib/business";
@@ -17,8 +17,6 @@ export const Route = createFileRoute("/")({
   }),
   component: Index,
 });
-
-type Service = { id: string; name: string; description: string; duration_min: number };
 
 function nextDays(n: number) {
   const out: Date[] = [];
@@ -44,13 +42,12 @@ function Index() {
   const [done, setDone] = useState<{ code: string } | null>(null);
 
   useEffect(() => {
-    supabase.from("services").select("*").order("sort").then(({ data }) => setServices(data ?? []));
+    setServices(SERVICES);
     setDay(nextDays(1)[0] ?? null);
   }, []);
 
-  const loadBusy = async (d: Date) => {
-    const { data } = await supabase.rpc("get_busy", { _date: toISODate(d) });
-    setBusy((data as Busy[]) ?? []);
+  const loadBusy = (d: Date) => {
+    setBusy(getBusy(toISODate(d)));
   };
   useEffect(() => {
     if (day) loadBusy(day);
@@ -69,18 +66,16 @@ function Index() {
     if (!service || !day || slot === null) return;
     setSending(true);
     setError("");
-    const { data, error } = await supabase.rpc("book_appointment", {
-      _service: service.id, _date: toISODate(day), _start: slot,
-      _name: form.name, _phone: form.phone, _notes: form.notes,
-    });
-    setSending(false);
-    if (error) {
-      setError(error.message);
+    try {
+      const code = bookAppointment({ service_id: service.id, date: toISODate(day), start: slot, name: form.name, phone: form.phone, notes: form.notes });
+      setSending(false);
+      setDone({ code });
+    } catch (err) {
+      setSending(false);
+      setError((err as Error).message);
       loadBusy(day);
       setSlot(null);
-      return;
     }
-    setDone({ code: data as string });
   };
 
   const dayLabel = (d: Date) => d.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" });
