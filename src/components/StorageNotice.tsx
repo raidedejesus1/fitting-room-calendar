@@ -17,7 +17,7 @@ export function StorageNotice() {
   if (!blocked) return null;
   return (
     <div role="alert" className="border-b border-border bg-secondary px-5 py-2 text-center text-sm text-secondary-foreground">
-      Tu navegador tiene bloqueado el almacenamiento local. Podés reservar igual, pero no vas a poder mantener la sesión del panel. Activá las cookies y datos de sitios para este sitio.
+      Tu navegador tiene bloqueado el almacenamiento local. Podés usar la agenda, pero las reservas no se guardan al cerrar la pestaña. Activá las cookies y datos de sitios para este sitio.
     </div>
   );
 }

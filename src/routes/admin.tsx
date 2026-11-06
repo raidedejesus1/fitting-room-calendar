@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ADMIN_PASSWORD, ADMIN_SESSION_KEY } from "@/lib/admin";
-import { addBlock, cancelBooking, getBlocks, getBookings, getBusy, moveBooking, removeBlock as dropBlock, serviceName, type Block, type Booking } from "@/lib/store";
+import { addBlock, cancelBooking, getBlocks, getBookings, getBusy, moveBooking, removeBlock as dropBlock, resetStore, serviceName, type Block, type Booking } from "@/lib/store";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Field } from "@/components/Field";
 import { fmt, isWorkday, slotsFor, toISODate } from "@/lib/agenda";
@@ -103,6 +103,7 @@ function Agenda({ onLock }: { onLock: () => void }) {
           <p className="mt-1 text-muted-foreground">Próximos turnos de prueba</p>
         </div>
         <div className="flex gap-4">
+          <button onClick={() => { if (confirm("¿Borrar todos los cambios y volver a los datos de ejemplo?")) { resetStore(); load(); } }} className="text-sm text-accent underline">Reiniciar datos de ejemplo</button>
           <button onClick={onLock} className="text-sm text-accent underline">Salir</button>
         </div>
       </div>
