@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import type { Session } from "@supabase/supabase-js";
-import { supabase } from "@/integrations/supabase/client";
+import { ADMIN_PASSWORD, ADMIN_SESSION_KEY } from "@/lib/admin";
+import { addBlock, cancelBooking, getBlocks, getBookings, getBusy, moveBooking, removeBlock as dropBlock, serviceName, type Block, type Booking } from "@/lib/store";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Field } from "@/components/Field";
-import { fmt, isWorkday, slotsFor, toISODate, type Busy } from "@/lib/agenda";
+import { fmt, isWorkday, slotsFor, toISODate } from "@/lib/agenda";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -19,97 +19,72 @@ export const Route = createFileRoute("/admin")({
   component: Panel,
 });
 
-type Block = { id: string; block_date: string; start_min: number; duration_min: number; reason: string };
-type Row = {
-  id: string; booking_date: string; start_min: number; duration_min: number; client_name: string;
-  client_phone: string; notes: string | null; status: string; cancel_code: string; services: { name: string } | null;
-};
+type Row = Booking;
+
+function readFlag() {
+  try { return window.sessionStorage.getItem(ADMIN_SESSION_KEY) === "1"; } catch { return false; }
+}
+function setFlag(on: boolean) {
+  try { on ? window.sessionStorage.setItem(ADMIN_SESSION_KEY, "1") : window.sessionStorage.removeItem(ADMIN_SESSION_KEY); } catch { /* noop */ }
+}
 
 function Panel() {
-  const [session, setSession] = useState<Session | null>(null);
+  const [unlocked, setUnlocked] = useState(false);
   const [ready, setReady] = useState(false);
-  useEffect(() => {
-    const { data } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
-    supabase.auth.getSession().then(({ data }) => { setSession(data.session); setReady(true); });
-    return () => data.subscription.unsubscribe();
-  }, []);
+  useEffect(() => { setUnlocked(readFlag()); setReady(true); }, []);
+  const lock = () => { setFlag(false); setUnlocked(false); };
 
   return (
     <div className="min-h-screen">
       <SiteHeader />
       <main className="mx-auto max-w-5xl px-5 py-10">
-        {!ready ? null : session ? <Agenda /> : <Login />}
+        {!ready ? null : unlocked ? <Agenda onLock={lock} /> : <Login onOk={() => { setFlag(true); setUnlocked(true); }} />}
       </main>
     </div>
   );
 }
 
-function Login() {
-  const [mode, setMode] = useState<"in" | "up">("in");
-  const [email, setEmail] = useState("");
+function Login({ onOk }: { onOk: () => void }) {
   const [password, setPassword] = useState("");
   const [msg, setMsg] = useState("");
-  const submit = async (e: React.FormEvent) => {
+  const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    setMsg("");
-    if (mode === "in") {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) setMsg("Email o contraseña incorrectos.");
-    } else {
-      const { error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: `${window.location.origin}/admin` } });
-      setMsg(error ? error.message : "Te enviamos un email para confirmar la cuenta.");
-    }
+    if (password === ADMIN_PASSWORD) onOk(); else setMsg("Clave incorrecta.");
   };
   return (
     <div className="mx-auto max-w-sm">
       <h1 className="text-3xl font-semibold">Panel del taller</h1>
-      <p className="mt-2 text-sm text-muted-foreground">Solo para la modista. La primera cuenta creada queda como dueña del panel.</p>
+      <p className="mt-2 text-sm text-muted-foreground">Solo para la modista. Ingresá la clave del panel.</p>
       <form onSubmit={submit} className="stitch mt-6 space-y-4 rounded-xl bg-card p-6">
-        <Field label="Email"><input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="input" /></Field>
-        <Field label="Contraseña"><input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} className="input" /></Field>
-        {msg && <p className="text-sm text-muted-foreground">{msg}</p>}
-        <button className="w-full rounded-full bg-primary py-3 font-medium text-primary-foreground">{mode === "in" ? "Entrar" : "Crear cuenta"}</button>
-        <button type="button" onClick={() => setMode(mode === "in" ? "up" : "in")} className="w-full text-sm text-accent underline">
-          {mode === "in" ? "Crear cuenta" : "Ya tengo cuenta"}
-        </button>
+        <Field label="Clave"><input type="password" required autoFocus value={password} onChange={(e) => setPassword(e.target.value)} className="input" /></Field>
+        {msg && <p className="text-sm text-destructive">{msg}</p>}
+        <button className="w-full rounded-full bg-primary py-3 font-medium text-primary-foreground">Entrar</button>
       </form>
     </div>
   );
 }
 
-function Agenda() {
+function Agenda({ onLock }: { onLock: () => void }) {
   const [rows, setRows] = useState<Row[] | null>(null);
-  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [showCancelled, setShowCancelled] = useState(false);
   const [moving, setMoving] = useState<string | null>(null);
   const [blocks, setBlocks] = useState<Block[]>([]);
 
-  const load = async () => {
-    const { data: u } = await supabase.auth.getUser();
-    const { data: role } = await supabase.from("user_roles").select("role").eq("user_id", u.user!.id).eq("role", "admin").maybeSingle();
-    setIsAdmin(!!role);
-    if (!role) return;
-    const { data } = await supabase.from("bookings").select("*, services(name)")
-      .gte("booking_date", toISODate(new Date())).order("booking_date").order("start_min");
-    setRows((data as Row[]) ?? []);
-    const { data: bl } = await supabase.from("time_blocks").select("*")
-      .gte("block_date", toISODate(new Date())).order("block_date").order("start_min");
-    setBlocks((bl as Block[]) ?? []);
+  const load = () => {
+    const today = toISODate(new Date());
+    setRows(getBookings().filter((r) => r.booking_date >= today)
+      .sort((x, y) => x.booking_date.localeCompare(y.booking_date) || x.start_min - y.start_min));
+    setBlocks(getBlocks().filter((b) => b.block_date >= today)
+      .sort((x, y) => x.block_date.localeCompare(y.block_date) || x.start_min - y.start_min));
   };
   useEffect(() => { load(); }, []);
 
-  const cancel = async (id: string) => {
+  const cancel = (id: string) => {
     if (!confirm("¿Cancelar este turno?")) return;
-    await supabase.from("bookings").update({ status: "cancelada" }).eq("id", id);
+    cancelBooking(id);
     load();
   };
 
-  if (isAdmin === false) return (
-    <div className="text-center">
-      <p>Esta cuenta no tiene acceso al panel.</p>
-      <button onClick={() => supabase.auth.signOut()} className="mt-4 text-accent underline">Salir</button>
-    </div>
-  );
   if (!rows) return <p className="text-muted-foreground">Cargando agenda…</p>;
 
   const visible = rows.filter((r) => showCancelled || r.status === "confirmada");
@@ -118,7 +93,7 @@ function Agenda() {
   const byDay = visible.reduce<Record<string, Row[]>>((acc, r) => ((acc[r.booking_date] ??= []).push(r), acc), {});
   for (const b of blocks) byDay[b.block_date] ??= [];
   const days = Object.keys(byDay).sort();
-  const removeBlock = async (id: string) => { await supabase.from("time_blocks").delete().eq("id", id); load(); };
+  const removeBlock = (id: string) => { dropBlock(id); load(); };
 
   return (
     <div>
@@ -128,8 +103,7 @@ function Agenda() {
           <p className="mt-1 text-muted-foreground">Próximos turnos de prueba</p>
         </div>
         <div className="flex gap-4">
-          <ChangePassword />
-          <button onClick={() => supabase.auth.signOut()} className="text-sm text-accent underline">Salir</button>
+          <button onClick={onLock} className="text-sm text-accent underline">Salir</button>
         </div>
       </div>
       <div className="mt-6 grid gap-3 sm:grid-cols-3">
@@ -160,7 +134,7 @@ function Agenda() {
                 <div className="w-28 font-serif text-lg text-primary">{fmt(r.start_min)}–{fmt(r.start_min + r.duration_min)}</div>
                 <div className="min-w-48 flex-1">
                   <p className="font-medium">{r.client_name} <span className="text-sm text-muted-foreground">· {r.client_phone}</span></p>
-                  <p className="text-sm text-accent">{r.services?.name}</p>
+                  <p className="text-sm text-accent">{serviceName(r.service_id)}</p>
                   {r.notes && <p className="text-sm text-muted-foreground">{r.notes}</p>}
                 </div>
                 {r.status === "confirmada" ? (
@@ -190,21 +164,16 @@ function Stat({ label, value }: { label: string; value: number | string }) {
 
 function MoveForm({ row, onDone }: { row: Row; onDone: () => void }) {
   const [date, setDate] = useState(row.booking_date);
-  const [busy, setBusy] = useState<Busy[]>([]);
   const [start, setStart] = useState<number | null>(null);
   const [err, setErr] = useState("");
-  useEffect(() => {
-    setStart(null);
-    supabase.rpc("get_busy", { _date: date }).then(({ data }) => setBusy((data as Busy[]) ?? []));
-  }, [date]);
+  useEffect(() => { setStart(null); }, [date]);
   const workday = isWorkday(new Date(date + "T12:00"));
   // Exclude this booking's own slot so it can shift within the same day
-  const others = busy.filter((b) => !(date === row.booking_date && b.start_min === row.start_min));
+  const others = getBusy(date, row.id);
   const free = workday ? slotsFor(row.duration_min, others).filter((s) => s.free) : [];
-  const save = async () => {
+  const save = () => {
     if (start === null) return;
-    const { error } = await supabase.rpc("move_booking", { _id: row.id, _date: date, _start: start });
-    if (error) setErr(error.message); else onDone();
+    try { moveBooking(row.id, date, start); onDone(); } catch (e) { setErr((e as Error).message); }
   };
   return (
     <div className="w-full space-y-3 border-t border-border pt-3">
@@ -226,40 +195,21 @@ function MoveForm({ row, onDone }: { row: Row; onDone: () => void }) {
   );
 }
 
-function ChangePassword() {
-  const [open, setOpen] = useState(false);
-  const [pw, setPw] = useState("");
-  const [msg, setMsg] = useState("");
-  if (!open) return <button onClick={() => setOpen(true)} className="text-sm text-accent underline">Cambiar clave</button>;
-  return (
-    <form className="flex flex-wrap items-center gap-2" onSubmit={async (e) => {
-      e.preventDefault();
-      const { error } = await supabase.auth.updateUser({ password: pw });
-      setMsg(error ? error.message : "Clave actualizada");
-      if (!error) setPw("");
-    }}>
-      <input type="password" required minLength={6} value={pw} onChange={(e) => setPw(e.target.value)} className="input w-40" placeholder="Nueva clave" />
-      <button className="rounded-full bg-primary px-4 py-2 text-sm text-primary-foreground">Guardar</button>
-      {msg && <span className="text-sm text-muted-foreground">{msg}</span>}
-    </form>
-  );
-}
-
 function BlockForm({ onDone }: { onDone: () => void }) {
   const [date, setDate] = useState(toISODate(new Date()));
-  const [busy, setBusy] = useState<Busy[]>([]);
   const [start, setStart] = useState<number | null>(null);
   const [reason, setReason] = useState("");
   const [err, setErr] = useState("");
-  const refresh = () => supabase.rpc("get_busy", { _date: date }).then(({ data }) => setBusy((data as Busy[]) ?? []));
-  useEffect(() => { setStart(null); refresh(); }, [date]);
+  const [tick, setTick] = useState(0);
+  const refresh = () => setTick(tick + 1);
+  useEffect(() => { setStart(null); }, [date]);
+  const busy = getBusy(date);
   const workday = isWorkday(new Date(date + "T12:00"));
   const free = workday ? slotsFor(20, busy).filter((s) => s.free) : [];
-  const save = async (e: React.FormEvent) => {
+  const save = (e: React.FormEvent) => {
     e.preventDefault();
     if (start === null) return;
-    const { error } = await supabase.rpc("add_block", { _date: date, _start: start, _reason: reason });
-    if (error) { setErr(error.message); return; }
+    try { addBlock(date, start, reason); } catch (er) { setErr((er as Error).message); return; }
     setErr(""); setStart(null); setReason(""); refresh(); onDone();
   };
   return (
