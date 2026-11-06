@@ -32,7 +32,7 @@ function nextWorkdays(n: number, from = new Date()) {
 }
 
 export function seed(from = new Date()): State {
-  const [d1, d2, d3, d4, d5] = nextWorkdays(5, from);
+  const [d1, d2, d3, d4, d5] = nextWorkdays(5, from) as [string, string, string, string, string];
   const b = (code: string, service_id: string, date: string, start: number, name: string, phone: string, notes: string): Booking => ({
     id: uid(), service_id, booking_date: date, start_min: start,
     duration_min: SERVICES.find((s) => s.id === service_id)!.duration_min,
